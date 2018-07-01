@@ -392,7 +392,7 @@ def UCTPlayGame():
         if state.playerJustMoved == 1:
             m = UCT(rootstate=state, itermax=1000, verbose=False)  # play with values for itermax and verbose = True
         else:
-            m = UCT(rootstate=state, itermax=100, verbose=False)
+            m = UCT(rootstate=state, itermax=1, verbose=False)
         print
         "Best Move: " + str(m) + "\n"
         state.DoMove(m)
