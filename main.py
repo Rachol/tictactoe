@@ -17,91 +17,19 @@
 
 from math import *
 import random
+import copy
+import math
+import time
+from multiprocessing import Process, Queue, Lock
 
+def get_grid_from_cords(x, y):
+    return int(math.floor(y/3)) * 3 + int(math.floor(x/3))
 
-class GameState:
-    """ A state of the game, i.e. the game board. These are the only functions which are
-        absolutely necessary to implement UCT in any 2-player complete information deterministic
-        zero-sum game, although they can be enhanced and made quicker, for example by using a
-        GetRandomMove() function to generate a random move during rollout.
-        By convention the players are numbered 1 and 2.
-    """
-
-    def __init__(self):
-        self.playerJustMoved = 2  # At the root pretend the player just moved is player 2 - player 1 has the first move
-
-    def Clone(self):
-        """ Create a deep clone of this game state.
-        """
-        st = GameState()
-        st.playerJustMoved = self.playerJustMoved
-        return st
-
-    def DoMove(self, move):
-        """ Update a state by carrying out the given move.
-            Must update playerJustMoved.
-        """
-        self.playerJustMoved = 3 - self.playerJustMoved
-
-    def GetMoves(self):
-        """ Get all possible moves from this state.
-        """
-
-    def GetResult(self, playerjm):
-        """ Get the game result from the viewpoint of playerjm.
-        """
-
-    def __repr__(self):
-        """ Don't need this - but good style.
-        """
-        pass
-
-
-class NimState:
-    """ A state of the game Nim. In Nim, players alternately take 1,2 or 3 chips with the
-        winner being the player to take the last chip.
-        In Nim any initial state of the form 4n+k for k = 1,2,3 is a win for player 1
-        (by choosing k) chips.
-        Any initial state of the form 4n is a win for player 2.
-    """
-
-    def __init__(self, ch):
-        self.playerJustMoved = 2  # At the root pretend the player just moved is p2 - p1 has the first move
-        self.chips = ch
-
-    def Clone(self):
-        """ Create a deep clone of this game state.
-        """
-        st = NimState(self.chips)
-        st.playerJustMoved = self.playerJustMoved
-        return st
-
-    def DoMove(self, move):
-        """ Update a state by carrying out the given move.
-            Must update playerJustMoved.
-        """
-        assert move >= 1 and move <= 3 and move == int(move)
-        self.chips -= move
-        self.playerJustMoved = 3 - self.playerJustMoved
-
-    def GetMoves(self):
-        """ Get all possible moves from this state.
-        """
-        return range(1, min([4, self.chips + 1]))
-
-    def GetResult(self, playerjm):
-        """ Get the game result from the viewpoint of playerjm.
-        """
-        assert self.chips == 0
-        if self.playerJustMoved == playerjm:
-            return 1.0  # playerjm took the last chip and has won
-        else:
-            return 0.0  # playerjm's opponent took the last chip and has won
-
-    def __repr__(self):
-        s = "Chips:" + str(self.chips) + " JustPlayed:" + str(self.playerJustMoved)
-        return s
-
+def get_offset_for_grid(number):
+    return [
+        number%3 * 3,
+        int(math.floor(number/3)) * 3
+    ]
 
 class OXOState:
     """ A state of the game, i.e. the game board.
@@ -113,170 +41,108 @@ class OXOState:
     """
 
     def __init__(self):
-        self.playerJustMoved = 2  # At the root pretend the player just moved is p2 - p1 has the first move
-        self.board = [0, 0, 0, 0, 0, 0, 0, 0, 0]  # 0 = empty, 1 = player 1, 2 = player 2
+        self.playerJustMoved = 0  # At the root pretend the player just moved is p2 - p1 has the first move
+        self.lastMove = [-1,-1]
+        self.board = [
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0]
+            ]# 0 = empty, 1 = player 1, 2 = player 2
 
     def Clone(self):
         """ Create a deep clone of this game state.
         """
         st = OXOState()
         st.playerJustMoved = self.playerJustMoved
-        st.board = self.board[:]
+        st.board = copy.deepcopy(self.board)
+        st.lastMove = copy.deepcopy(self.lastMove)
         return st
 
     def DoMove(self, move):
         """ Update a state by carrying out the given move.
             Must update playerToMove.
         """
-        assert move >= 0 and move <= 8 and move == int(move) and self.board[move] == 0
-        self.playerJustMoved = 3 - self.playerJustMoved
-        self.board[move] = self.playerJustMoved
+        coords = [move % 9, math.floor(move / 9)]
+        assert move >= 0 and move <= 80 and move == int(move) and self.board[coords[1]][coords[0]] == 0
+        self.playerJustMoved = 1 if (self.playerJustMoved == 2 or self.playerJustMoved == 0) else 2
+        self.board[coords[1]][coords[0]] = self.playerJustMoved
+        self.lastMove = coords
 
     def GetMoves(self):
         """ Get all possible moves from this state.
         """
-        return [i for i in range(9) if self.board[i] == 0]
+        ## Using first player, because we are only interested in a draw anyway
+        if self.lastMove[0] == self.lastMove[1] == -1:
+            return [i for i in range(81) if self.board[math.floor(i / 9)][i % 9] == 0]
+
+        gridNumber = self.lastMove[0]%3 + self.lastMove[1]%3 * 3
+        offset = get_offset_for_grid(gridNumber)
+        gridWinner = self.GetGridWinner(gridNumber)
+        moves = []
+        if gridWinner == 0:
+            moves = [((math.floor(i / 3) + offset[1]) * 9 + i % 3 + offset[0]) for i in range(9) if self.board[math.floor(i / 3) + offset[1]][i % 3 + offset[0]] == 0]
+
+        if len(moves) == 0:
+            for gN in range(9):
+                if self.GetGridWinner(gN) == 0:
+                    offset = get_offset_for_grid(gN)
+                    moves.extend([((math.floor(i / 3) + offset[1]) * 9 + i % 3 + offset[0]) for i in range(9) if self.board[math.floor(i / 3) + offset[1]][i % 3 + offset[0]] == 0])
+            # moves = [i for i in range(81) if self.board[math.floor(i / 9)][i % 9] == 0]
+        return moves
+
+    def SimplifyBoard(self):
+        return [self.board[math.floor(i / 9)][i % 9] for i in range(81)]
+
+    def GetGridWinner(self, gridNumber):
+        offset = get_offset_for_grid(gridNumber)
+        lines = [(0, 1, 2), (9, 10, 11), (18, 19, 20), (0, 9, 18), (1, 10, 19), (2, 11, 20), (0, 10, 20), (2, 10, 18)]
+        lines = map(lambda x: map(lambda y: y + offset[0] + offset[1]*9, x), lines)
+        simpleBoard = self.SimplifyBoard()
+        for (x, y, z) in lines:
+            if simpleBoard[x] == simpleBoard[y] == simpleBoard[z]:
+                if simpleBoard[x] > 0:
+                    return simpleBoard[x]
+        return 0
 
     def GetResult(self, playerjm):
         """ Get the game result from the viewpoint of playerjm.
         """
+        grid = [self.GetGridWinner(0), self.GetGridWinner(1), self.GetGridWinner(2),
+                self.GetGridWinner(3), self.GetGridWinner(4), self.GetGridWinner(5),
+                self.GetGridWinner(6), self.GetGridWinner(7), self.GetGridWinner(8)]
         for (x, y, z) in [(0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6)]:
-            if self.board[x] == self.board[y] == self.board[z]:
-                if self.board[x] == playerjm:
+            if grid[x] == grid[y] == grid[z] and grid[x] > 0:
+                if grid[x] == playerjm:
                     return 1.0
                 else:
-                    return 0.0
-        if self.GetMoves() == []: return 0.5  # draw
+                    return 0
+
+        if self.GetMoves() == []:
+            s = 0
+            for i in range(9):
+                s += 1 if grid[i] == playerjm else -1 if grid[i] == (3 - playerjm) else 0
+            if s > 0:
+                return 1.0
+            elif s == 0:
+                return 0.5
+            else:
+                return 0
         assert False  # Should not be possible to get here
 
     def __repr__(self):
         s = ""
-        for i in range(9):
-            s += ".XO"[self.board[i]]
-            if i % 3 == 2: s += "\n"
+        for i in range(81):
+            s += ".XO"[self.board[math.floor(i/9)][i%9]]
+            if i % 3 == 2: s += " | "
+            if i % 9 == 8: s += "\n"
+            if i % 27 == 26: s += "-----------------\n"
         return s
-
-
-class OthelloState:
-    """ A state of the game of Othello, i.e. the game board.
-        The board is a 2D array where 0 = empty (.), 1 = player 1 (X), 2 = player 2 (O).
-        In Othello players alternately place pieces on a square board - each piece played
-        has to sandwich opponent pieces between the piece played and pieces already on the
-        board. Sandwiched pieces are flipped.
-        This implementation modifies the rules to allow variable sized square boards and
-        terminates the game as soon as the player about to move cannot make a move (whereas
-        the standard game allows for a pass move).
-    """
-
-    def __init__(self, sz=8):
-        self.playerJustMoved = 2  # At the root pretend the player just moved is p2 - p1 has the first move
-        self.board = []  # 0 = empty, 1 = player 1, 2 = player 2
-        self.size = sz
-        assert sz == int(sz) and sz % 2 == 0  # size must be integral and even
-        for y in range(sz):
-            self.board.append([0] * sz)
-        self.board[sz / 2][sz / 2] = self.board[sz / 2 - 1][sz / 2 - 1] = 1
-        self.board[sz / 2][sz / 2 - 1] = self.board[sz / 2 - 1][sz / 2] = 2
-
-    def Clone(self):
-        """ Create a deep clone of this game state.
-        """
-        st = OthelloState()
-        st.playerJustMoved = self.playerJustMoved
-        st.board = [self.board[i][:] for i in range(self.size)]
-        st.size = self.size
-        return st
-
-    def DoMove(self, move):
-        """ Update a state by carrying out the given move.
-            Must update playerToMove.
-        """
-        (x, y) = (move[0], move[1])
-        assert x == int(x) and y == int(y) and self.IsOnBoard(x, y) and self.board[x][y] == 0
-        m = self.GetAllSandwichedCounters(x, y)
-        self.playerJustMoved = 3 - self.playerJustMoved
-        self.board[x][y] = self.playerJustMoved
-        for (a, b) in m:
-            self.board[a][b] = self.playerJustMoved
-
-    def GetMoves(self):
-        """ Get all possible moves from this state.
-        """
-        return [(x, y) for x in range(self.size) for y in range(self.size) if
-                self.board[x][y] == 0 and self.ExistsSandwichedCounter(x, y)]
-
-    def AdjacentToEnemy(self, x, y):
-        """ Speeds up GetMoves by only considering squares which are adjacent to an enemy-occupied square.
-        """
-        for (dx, dy) in [(0, +1), (+1, +1), (+1, 0), (+1, -1), (0, -1), (-1, -1), (-1, 0), (-1, +1)]:
-            if self.IsOnBoard(x + dx, y + dy) and self.board[x + dx][y + dy] == self.playerJustMoved:
-                return True
-        return False
-
-    def AdjacentEnemyDirections(self, x, y):
-        """ Speeds up GetMoves by only considering squares which are adjacent to an enemy-occupied square.
-        """
-        es = []
-        for (dx, dy) in [(0, +1), (+1, +1), (+1, 0), (+1, -1), (0, -1), (-1, -1), (-1, 0), (-1, +1)]:
-            if self.IsOnBoard(x + dx, y + dy) and self.board[x + dx][y + dy] == self.playerJustMoved:
-                es.append((dx, dy))
-        return es
-
-    def ExistsSandwichedCounter(self, x, y):
-        """ Does there exist at least one counter which would be flipped if my counter was placed at (x,y)?
-        """
-        for (dx, dy) in self.AdjacentEnemyDirections(x, y):
-            if len(self.SandwichedCounters(x, y, dx, dy)) > 0:
-                return True
-        return False
-
-    def GetAllSandwichedCounters(self, x, y):
-        """ Is (x,y) a possible move (i.e. opponent counters are sandwiched between (x,y) and my counter in some direction)?
-        """
-        sandwiched = []
-        for (dx, dy) in self.AdjacentEnemyDirections(x, y):
-            sandwiched.extend(self.SandwichedCounters(x, y, dx, dy))
-        return sandwiched
-
-    def SandwichedCounters(self, x, y, dx, dy):
-        """ Return the coordinates of all opponent counters sandwiched between (x,y) and my counter.
-        """
-        x += dx
-        y += dy
-        sandwiched = []
-        while self.IsOnBoard(x, y) and self.board[x][y] == self.playerJustMoved:
-            sandwiched.append((x, y))
-            x += dx
-            y += dy
-        if self.IsOnBoard(x, y) and self.board[x][y] == 3 - self.playerJustMoved:
-            return sandwiched
-        else:
-            return []  # nothing sandwiched
-
-    def IsOnBoard(self, x, y):
-        return x >= 0 and x < self.size and y >= 0 and y < self.size
-
-    def GetResult(self, playerjm):
-        """ Get the game result from the viewpoint of playerjm.
-        """
-        jmcount = len([(x, y) for x in range(self.size) for y in range(self.size) if self.board[x][y] == playerjm])
-        notjmcount = len(
-            [(x, y) for x in range(self.size) for y in range(self.size) if self.board[x][y] == 3 - playerjm])
-        if jmcount > notjmcount:
-            return 1.0
-        elif notjmcount > jmcount:
-            return 0.0
-        else:
-            return 0.5  # draw
-
-    def __repr__(self):
-        s = ""
-        for y in range(self.size - 1, -1, -1):
-            for x in range(self.size):
-                s += ".XO"[self.board[x][y]]
-            s += "\n"
-        return s
-
 
 class Node:
     """ A node in the game tree. Note wins is always from the viewpoint of playerJustMoved.
@@ -297,7 +163,7 @@ class Node:
             lambda c: c.wins/c.visits + UCTK * sqrt(2*log(self.visits)/c.visits to vary the amount of
             exploration versus exploitation.
         """
-        s = sorted(self.childNodes, key=lambda c: c.wins / c.visits + sqrt(2 * log(self.visits) / c.visits))[-1]
+        s = sorted(self.childNodes, key=lambda c: c.wins / c.visits + math.sqrt(2 * math.log(self.visits) / c.visits))[-1]
         return s
 
     def AddChild(self, m, s):
@@ -345,7 +211,12 @@ def UCT(rootstate, itermax, verbose=False):
 
     rootnode = Node(state=rootstate)
 
-    for i in range(itermax):
+    start_time = time.time()
+    loops = 0;
+    while True:
+        loop_start_time = time.time()
+        loops += 1
+    # for i in range(itermax):
         node = rootnode
         state = rootstate.Clone()
 
@@ -370,16 +241,28 @@ def UCT(rootstate, itermax, verbose=False):
                 node.playerJustMoved))  # state is terminal. Update node with result from POV of node.playerJustMoved
             node = node.parentNode
 
+        cur_time = time.time()
+        loop_time = cur_time - loop_start_time
+        if (cur_time + loop_time) > (start_time + 0.001 * itermax):
+            break
+
     # Output some information about the tree - can be omitted
     if (verbose):
-        print(rootnode.TreeToString(0))
+        # print(rootnode.TreeToString(0))
+        pass
     else:
-        print(rootnode.ChildrenToString())
+        # print(rootnode.ChildrenToString())
+        pass
 
-    return sorted(rootnode.childNodes, key=lambda c: c.visits)[-1].move  # return the move that was most visited
+    if len(rootnode.childNodes) == 0:
+        print("hmm", loops)
+        # print(rootstate)
+        print(rootnode.TreeToString(0))
+
+    return sorted(sorted(rootnode.childNodes, key=lambda c: c.wins), key=lambda c: c.visits)[-1].move  # return the move that was most visited
 
 
-def UCTPlayGame():
+def UCTPlayGame(max_iterations):
     """ Play a sample game between two UCT players where each player gets a different number
         of UCT iterations (= simulations = tree nodes).
     """
@@ -387,31 +270,162 @@ def UCTPlayGame():
     state = OXOState() # uncomment to play OXO
     # state = NimState(15)  # uncomment to play Nim with the given number of starting chips
     while (state.GetMoves() != []):
-        print
-        str(state)
-        if state.playerJustMoved == 1:
-            m = UCT(rootstate=state, itermax=1000, verbose=False)  # play with values for itermax and verbose = True
+        # print(str(state))
+        if state.playerJustMoved == 2 or state.playerJustMoved == 0:
+            m = UCT(rootstate=state, itermax=max_iterations, verbose=False)  # player 1
         else:
-            m = UCT(rootstate=state, itermax=1, verbose=False)
-        print
-        "Best Move: " + str(m) + "\n"
+            # m = UCT(rootstate=state, itermax=max_iterations, verbose=False) # player 2
+            m = random.choice(state.GetMoves())
+        # print("Best Move: " + str(m) + "\n")
         state.DoMove(m)
+
+    # print(str(state))
+
     if state.GetResult(state.playerJustMoved) == 1.0:
-        print
-        "Player " + str(state.playerJustMoved) + " wins!"
+        print("Player " + str(state.playerJustMoved) + " wins!")
+        return state.playerJustMoved
     elif state.GetResult(state.playerJustMoved) == 0.0:
-        print
-        "Player " + str(3 - state.playerJustMoved) + " wins!"
+        print("Player " + str(3 - state.playerJustMoved) + " wins!")
+        return 3 - state.playerJustMoved
     else:
-        print
-    "Nobody wins!"
+        print("Nobody wins!")
+        return 0
+
+game_instance = None
+
+class UCTPlayer:
+    def __init__(self, max_iterations):
+        self.state = OXOState()
+        self.playerNum = 1
+        self.maxIterations = max_iterations
+        pass
+
+    def get_move(self, opponentAction, validActions):
+        if opponentAction[0] == opponentAction[1] == -1:
+            self.playerNum = 2
+        else:
+            self.state.DoMove(opponentAction[0] + opponentAction[1] * 9)
+
+        # moves = self.state.GetMoves()
+        # validate that moves and validActions are the same
+        # error = False
+        # if len(moves) != len(validActions):
+        #     error = True
+        #
+        # for i in moves:
+        #     cords = [i % 9, math.floor(i / 9)]
+        #     if cords not in validActions:
+        #         error = True
+        #
+        # if error:
+        #     print("Something is wrong")
+        #     print(self.state)
+        #     global game_instance
+        #     game_instance.printGrid()
+        #     print([ [i % 9, math.floor(i / 9)] for i in moves ])
+        #     print(validActions)
+
+
+        m = UCT(rootstate=self.state, itermax=self.maxIterations, verbose=True)
+        # print(m)
+        self.state.DoMove(m)
+
+        move = [m % 9, math.floor(m / 9)]
+
+        return move
+
+
+import tictactoe
+import ticplayer
+
+
+def play_game():
+    player1 = UCTPlayer(50)
+    player2 = ticplayer.BasicPlayer()
+    large = True
+    game_instance = tictactoe.Game(large, player1, player2)
+    return game_instance.play()
+
+def worker(q, lock):
+    """thread worker function"""
+    # print("started")
+    result = play_game()
+    # print("finished")
+    lock.acquire()
+    win_rate = q.get()
+    # print("got q", win_rate)
+    if result == 1:
+        win_rate += 1
+    elif result == 0:
+        win_rate += 0.5
+
+    q.put(win_rate)
+    # print("put q", win_rate)
+    lock.release()
+    return
+
+def get_win_rate(number):
+    lock = Lock()
+    q = Queue()
+    win_rate = 0
+    q.put(win_rate)
+    ts = []
+    for i in range(number):
+        t = Process(target=worker, args=(q, lock,))
+        t.start()
+        ts.append(t)
+
+    for t in ts:
+        t.join()
+
+    win_rate = q.get()
+
+    return win_rate * (100/number)
+
+def evaluate_solution():
+    games = 1000;
+    divider = 0
+    win_rate_single = 0
+    jobs = 10
+    while games > 0:
+        temp_games = min(jobs, games)
+        games -= temp_games
+        divider += 1
+        win_rate_single += get_win_rate(temp_games)
+        print(win_rate_single / divider)
+
+import matplotlib.pyplot as plt
+
+def graph_things():
+    games = 1000
+    maximum_iters = 101
+    iters_steps = 5
+
+    plt.axis([0, maximum_iters, 0, games])
+
+    for max_iters in range(1, maximum_iters + 1, iters_steps):
+        s = 0
+        for i in range(games):
+            r = UCTPlayGame(max_iters)
+            s += 1 if r == 1 else 0.5 if r == 0 else 0
+            plt.pause(0.05)
+            print(i + 1, s)
+
+        plt.scatter(max_iters, s)
+        plt.pause(0.05)
+        print(s)
+
+    plt.show()
 
 
 if __name__ == "__main__":
     """ Play a single game to the end using UCT for both players. 
     """
-    UCTPlayGame()
-
+    evaluate_solution()
+    # while True:
+    # print(play_game())
+    # UCTPlayGame(100)
+    # graph_things()
 
 
 
