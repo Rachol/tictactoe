@@ -80,6 +80,7 @@ class Game:
         return 0
 
     def play(self, debug=False):
+        result = -1
         while self.check_winner() == 0:
             self.turn += 1
             actions = self.get_available_actions()
@@ -92,12 +93,12 @@ class Game:
                     elif grid.check_winner() == 2:
                         score -= 1
                 if score > 0:
-                    return 1
-
-                if score < 0:
-                    return 2
-
-                return 0
+                    result = 1
+                elif score < 0:
+                    result = 2
+                else:
+                    result = 0
+                break
             else:
                 if self.curPlayer == 1:
                     self.lastMove = self.player1.get_move(self.lastMove, actions)
@@ -118,7 +119,16 @@ class Game:
             if debug:
                 self.printGrid()
 
-        return self.check_winner()
+        # update the state of the player
+        if self.curPlayer == 1:
+            self.player1.get_move(self.lastMove, [])
+        else:
+            self.player2.get_move(self.lastMove, [])
+
+        if result == -1:
+            result = self.check_winner()
+
+        return result
 
 
 

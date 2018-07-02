@@ -78,6 +78,10 @@ class OXOState:
         """ Get all possible moves from this state.
         """
         ## Using first player, because we are only interested in a draw anyway
+        large_result = self.CheckForLargeResult(1)
+        if large_result != -1:
+            return []
+
         if self.lastMove[0] == self.lastMove[1] == -1:
             return [i for i in range(81) if self.board[math.floor(i / 9)][i % 9] == 0]
 
@@ -110,20 +114,30 @@ class OXOState:
                     return simpleBoard[x]
         return 0
 
-    def GetResult(self, playerjm):
-        """ Get the game result from the viewpoint of playerjm.
-        """
-        grid = [self.GetGridWinner(0), self.GetGridWinner(1), self.GetGridWinner(2),
+    def GetLargeGrid(self):
+        return [self.GetGridWinner(0), self.GetGridWinner(1), self.GetGridWinner(2),
                 self.GetGridWinner(3), self.GetGridWinner(4), self.GetGridWinner(5),
                 self.GetGridWinner(6), self.GetGridWinner(7), self.GetGridWinner(8)]
+
+    def CheckForLargeResult(self, playerjm):
+        grid = self.GetLargeGrid()
         for (x, y, z) in [(0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6)]:
             if grid[x] == grid[y] == grid[z] and grid[x] > 0:
                 if grid[x] == playerjm:
                     return 1.0
                 else:
                     return 0
+        return -1
 
-        if self.GetMoves() == []:
+    def GetResult(self, playerjm):
+        """ Get the game result from the viewpoint of playerjm.
+        """
+        large_result = self.CheckForLargeResult(playerjm)
+        if large_result != -1:
+            return large_result
+
+        grid = self.GetLargeGrid()
+        if len(self.GetMoves()) == 0:
             s = 0
             for i in range(9):
                 s += 1 if grid[i] == playerjm else -1 if grid[i] == (3 - playerjm) else 0
@@ -133,7 +147,9 @@ class OXOState:
                 return 0.5
             else:
                 return 0
-        assert False  # Should not be possible to get here
+        else:
+            return -1
+        # assert False  # Should not be possible to get here
 
     def __repr__(self):
         s = ""
@@ -243,6 +259,7 @@ def UCT(rootstate, itermax, verbose=False):
 
         cur_time = time.time()
         loop_time = cur_time - loop_start_time
+        print("loop time:", loop_time)
         if (cur_time + loop_time) > (start_time + 0.001 * itermax):
             break
 
@@ -259,6 +276,7 @@ def UCT(rootstate, itermax, verbose=False):
         # print(rootstate)
         print(rootnode.TreeToString(0))
 
+    print("loops", loops)
     return sorted(sorted(rootnode.childNodes, key=lambda c: c.wins), key=lambda c: c.visits)[-1].move  # return the move that was most visited
 
 
@@ -324,15 +342,24 @@ class UCTPlayer:
         #     game_instance.printGrid()
         #     print([ [i % 9, math.floor(i / 9)] for i in moves ])
         #     print(validActions)
-
-
-        m = UCT(rootstate=self.state, itermax=self.maxIterations, verbose=True)
-        # print(m)
-        self.state.DoMove(m)
-
-        move = [m % 9, math.floor(m / 9)]
+        move = None
+        if len(validActions) > 0:
+            m = UCT(rootstate=self.state, itermax=self.maxIterations, verbose=True)
+            # print(m)
+            self.state.DoMove(m)
+            # cur_result = self.state.GetResult(3-self.playerNum)
+            # if cur_result == 1.0:
+            #     print("I won", self.playerNum)
+            # elif cur_result == 0:
+            #     print("I lost", self.playerNum)
+            move = [m % 9, math.floor(m / 9)]
+        else:
+            pass
 
         return move
+
+    def getResult(self):
+        return self.state.GetResult(3 - self.playerNum)
 
 
 import tictactoe
@@ -340,11 +367,14 @@ import ticplayer
 
 
 def play_game():
-    player1 = UCTPlayer(50)
+    player1 = UCTPlayer(101)
     player2 = ticplayer.BasicPlayer()
     large = True
     game_instance = tictactoe.Game(large, player1, player2)
-    return game_instance.play()
+    result = game_instance.play()
+    if result != 1 if player1.getResult() == 1.0 else 2:
+        pass
+    return result
 
 def worker(q, lock):
     """thread worker function"""
@@ -386,7 +416,7 @@ def evaluate_solution():
     games = 1000;
     divider = 0
     win_rate_single = 0
-    jobs = 10
+    jobs = 1
     while games > 0:
         temp_games = min(jobs, games)
         games -= temp_games

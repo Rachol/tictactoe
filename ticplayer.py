@@ -47,8 +47,10 @@ class BasicPlayer:
         pass
 
     def get_move(self, opponentAction, validActions):
-        return random.choice(validActions)
-
+        if len(validActions) > 0:
+            return random.choice(validActions)
+        else:
+            return None
 
 def get_grid_from_cords(x, y):
     return int(math.floor(y/3)) * 3 + int(math.floor(x/3))
