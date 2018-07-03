@@ -31,6 +31,59 @@ def get_offset_for_grid(number):
         int(math.floor(number/3)) * 3
     ]
 
+
+class BasicOXOState:
+    """ A state of the game, i.e. the game board.
+        Squares in the board are in this arrangement
+        012
+        345
+        678
+        where 0 = empty, 1 = player 1 (X), 2 = player 2 (O)
+    """
+
+    def __init__(self, board):
+        self.playerJustMoved = 2  # At the root pretend the player just moved is p2 - p1 has the first move
+        self.board = copy.deepcopy(board)  # 0 = empty, 1 = player 1, 2 = player 2
+
+    def Clone(self):
+        """ Create a deep clone of this game state.
+        """
+        st = BasicOXOState(self.board)
+        st.playerJustMoved = self.playerJustMoved
+        return st
+
+    def DoMove(self, move):
+        """ Update a state by carrying out the given move.
+            Must update playerToMove.
+        """
+        assert move >= 0 and move <= 8 and move == int(move) and self.board[move] == 0
+        self.playerJustMoved = 3 - self.playerJustMoved
+        self.board[move] = self.playerJustMoved
+
+    def GetMoves(self):
+        """ Get all possible moves from this state.
+        """
+        return [i for i in range(9) if self.board[i] == 0]
+
+    def GetResult(self, playerjm):
+        """ Get the game result from the viewpoint of playerjm.
+        """
+        for (x, y, z) in [(0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6)]:
+            if self.board[x] == self.board[y] == self.board[z]:
+                if self.board[x] == playerjm:
+                    return 1.0
+                else:
+                    return 0.0
+        if self.GetMoves() == []: return 0.5  # draw
+        assert False  # Should not be possible to get here
+
+    def __repr__(self):
+        s = ""
+        for i in range(9):
+            s += ".XO"[self.board[i]]
+            if i % 3 == 2: s += "\n"
+        return s
+
 class OXOState:
     """ A state of the game, i.e. the game board.
         Squares in the board are in this arrangement
@@ -54,6 +107,7 @@ class OXOState:
             [0, 0, 0, 0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 0, 0, 0, 0]
             ]# 0 = empty, 1 = player 1, 2 = player 2
+        self.currentGrid = -1
 
     def Clone(self):
         """ Create a deep clone of this game state.
@@ -92,13 +146,27 @@ class OXOState:
         if gridWinner == 0:
             moves = [((math.floor(i / 3) + offset[1]) * 9 + i % 3 + offset[0]) for i in range(9) if self.board[math.floor(i / 3) + offset[1]][i % 3 + offset[0]] == 0]
 
+        self.currentGrid = gridNumber
+
         if len(moves) == 0:
             for gN in range(9):
                 if self.GetGridWinner(gN) == 0:
                     offset = get_offset_for_grid(gN)
                     moves.extend([((math.floor(i / 3) + offset[1]) * 9 + i % 3 + offset[0]) for i in range(9) if self.board[math.floor(i / 3) + offset[1]][i % 3 + offset[0]] == 0])
+            self.currentGrid = -1
+
             # moves = [i for i in range(81) if self.board[math.floor(i / 9)][i % 9] == 0]
         return moves
+
+    def GetCurrentGrid(self):
+        if self.currentGrid == -1:
+            return None
+        else:
+            offset = get_offset_for_grid(self.currentGrid)
+            return [self.board[math.floor(i / 3) + offset[1]][i % 3 + offset[0]] for i in range(9)]
+
+    def GetCurrentGridNumber(self):
+        return self.currentGrid
 
     def SimplifyBoard(self):
         return [self.board[math.floor(i / 9)][i % 9] for i in range(81)]
@@ -179,6 +247,7 @@ class Node:
             lambda c: c.wins/c.visits + UCTK * sqrt(2*log(self.visits)/c.visits to vary the amount of
             exploration versus exploitation.
         """
+
         s = sorted(self.childNodes, key=lambda c: c.wins / c.visits + math.sqrt(2 * math.log(self.visits) / c.visits))[-1]
         return s
 
@@ -219,6 +288,68 @@ class Node:
             s += str(c) + "\n"
         return s
 
+def UCTSmall(rootstate, itermax, verbose=False):
+    """ Conduct a UCT search for itermax iterations starting from rootstate.
+        Return the best move from the rootstate.
+        Assumes 2 alternating players (player 1 starts), with game results in the range [0.0, 1.0]."""
+
+    rootnode = Node(state=rootstate)
+
+    start_time = time.time()
+    loops = 0;
+    while True:
+        loop_start_time = time.time()
+        loops += 1
+    # for i in range(itermax):
+        node = rootnode
+        state = rootstate.Clone()
+
+        # Select
+        while node.untriedMoves == [] and node.childNodes != []:  # node is fully expanded and non-terminal
+            node = node.UCTSelectChild()
+            state.DoMove(node.move)
+
+        # Expand
+        if node.untriedMoves != []:  # if we can expand (i.e. state/node is non-terminal)
+            ## This is a place for improvement, here we can try to do a small simulation (just for the small grid)
+            m = random.choice(node.untriedMoves)
+            state.DoMove(m)
+            node = node.AddChild(m, state)  # add child and descend tree
+
+        # Rollout - this can often be made orders of magnitude quicker using a state.GetRandomMove() function
+        while state.GetMoves() != []:  # while state is non-terminal
+            m = random.choice(state.GetMoves())
+            state.DoMove(m)
+
+        # Backpropagate
+        while node != None:  # backpropagate from the expanded node and work back to the root node
+            node.Update(state.GetResult(
+                node.playerJustMoved))  # state is terminal. Update node with result from POV of node.playerJustMoved
+            node = node.parentNode
+
+        cur_time = time.time()
+        loop_time = cur_time - loop_start_time
+        # print("loop time:", loop_time)
+        if (cur_time + loop_time*2) > (start_time + 0.001 * itermax):
+            break
+
+    # Output some information about the tree - can be omitted
+    if (verbose):
+        # print(rootnode.TreeToString(0))
+        pass
+    else:
+        # print(rootnode.ChildrenToString())
+        pass
+
+    if len(rootnode.childNodes) == 0:
+        print("hmm", loops)
+        # print(rootstate)
+        # print(rootnode.TreeToString(0))
+
+    # print("Small loops", loops)
+
+    return sorted(sorted(rootnode.childNodes, key=lambda c: c.wins), key=lambda c: c.visits)[-1].move  # return the move that was most visited
+
 
 def UCT(rootstate, itermax, verbose=False):
     """ Conduct a UCT search for itermax iterations starting from rootstate.
@@ -243,13 +374,42 @@ def UCT(rootstate, itermax, verbose=False):
 
         # Expand
         if node.untriedMoves != []:  # if we can expand (i.e. state/node is non-terminal)
-            m = random.choice(node.untriedMoves)
+            ## This is a place for improvement, here we can try to do a small simulation (just for the small grid)
+            m = None
+            state.GetMoves() #updating current grid state :/
+            current_grid = state.GetCurrentGrid()
+            if current_grid is not None:
+                gn = state.GetCurrentGridNumber()
+                small_state = BasicOXOState(current_grid)
+                m = UCTSmall(rootstate=small_state, itermax=itermax/20, verbose=True)
+                m = (gn%3 * 3 + math.floor(gn/3) * 27 + math.floor(m/3) * 9 + m%3)
+                pass
+                #convert this to large grid again
+
+            if not (m in node.untriedMoves):
+                m = random.choice(node.untriedMoves)
+
             state.DoMove(m)
             node = node.AddChild(m, state)  # add child and descend tree
 
         # Rollout - this can often be made orders of magnitude quicker using a state.GetRandomMove() function
-        while state.GetMoves() != []:  # while state is non-terminal
-            state.DoMove(random.choice(state.GetMoves()))
+        moves = state.GetMoves()
+        moveNr = 0
+        while moves != []:  # while state is non-terminal
+            m = None
+            current_grid = state.GetCurrentGrid()
+            if current_grid is not None:
+                gn = state.GetCurrentGridNumber()
+                small_state = BasicOXOState(current_grid)
+                m = UCTSmall(rootstate=small_state, itermax=itermax/20 if moveNr == 0 else itermax/50, verbose=True)
+                m = (gn % 3 * 3 + math.floor(gn / 3) * 27 + math.floor(m / 3) * 9 + m % 3)
+                pass
+
+            if m is None:
+                m = random.choice(state.GetMoves())
+            state.DoMove(m)
+            moveNr += 1
+            moves = state.GetMoves()
 
         # Backpropagate
         while node != None:  # backpropagate from the expanded node and work back to the root node
@@ -259,8 +419,8 @@ def UCT(rootstate, itermax, verbose=False):
 
         cur_time = time.time()
         loop_time = cur_time - loop_start_time
-        print("loop time:", loop_time)
-        if (cur_time + loop_time) > (start_time + 0.001 * itermax):
+        # print("loop time:", loop_time)
+        if (cur_time + loop_time*2) > (start_time + 0.001 * itermax):
             break
 
     # Output some information about the tree - can be omitted
@@ -274,9 +434,9 @@ def UCT(rootstate, itermax, verbose=False):
     if len(rootnode.childNodes) == 0:
         print("hmm", loops)
         # print(rootstate)
-        print(rootnode.TreeToString(0))
+        # print(rootnode.TreeToString(0))
 
-    print("loops", loops)
+    # print("Large loops", loops)
     return sorted(sorted(rootnode.childNodes, key=lambda c: c.wins), key=lambda c: c.visits)[-1].move  # return the move that was most visited
 
 
