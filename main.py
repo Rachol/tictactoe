@@ -84,6 +84,110 @@ class BasicOXOState:
             if i % 3 == 2: s += "\n"
         return s
 
+class GameBoard:
+    def __init__(self):
+        self.p1 = Board(0)
+        self.p2 = Board(0)
+        self.lastMove = -1
+
+    def GetMoves(self):
+        ## First check if any of the players won
+        if self.p1.CheckWin():
+            return []
+        if self.p2.CheckWin():
+            return []
+
+        c = Board(self.p1.GetData() | self.p2.GetData())
+        if self.lastMove == -1:
+            return [i for i in range(81)]
+
+        gn = self.p1.GetNextMoveBoardNumber(self.lastMove)
+        ##Check if any moves available on that board
+        if (0b111111111 - c.ExtractSmallBoard()) == 0 or \
+                self.p1.CheckSmallWin(self.p1.ExtractSmallBoard(gn)) or \
+                self.p2.CheckSmallWin(self.p2.ExtractSmallBoard(gn)):
+            return [i for i in range(81) if c >> i & 1]
+
+        return []
+
+    def Move(self, move, player):
+        if player == 1:
+            self.p1.Move()
+            pass
+        elif player == 2:
+            self.p2.Move()
+            pass
+        self.lastMove = move
+
+class Board:
+    def __init__(self, d):
+        self.d = d
+        self.mNSB = []
+        for i in range(81):
+            self.mNSB.append(math.floor(i / 27) * 3 + math.floor((i % 9) / 3))
+
+    def Move(self, move):
+        self.d |= (1 << move)
+
+    def GetData(self):
+        return self.d
+
+    def GetNextMoveBoardNumber(self, move):
+        return self.mNSB[move]
+
+    # This does not take into account who has more little wins
+    def CheckWin(self):
+        return self.CheckSmallWin(self.GetResultBoard(self))
+
+    def GetResultBoard(self):
+        result_board = 0
+        for i in range(9):
+            result_board |= (self.CheckSmallWin(self.ExtractSmallBoard(i)) << i)
+        return result_board
+
+    def CheckSmallWin(self, d):
+        # 9 options
+        result = (d >> 0 & 0b000000111) or \
+                 (d >> 0 & 0b000111000) or \
+                 (d >> 0 & 0b111000000) or \
+                 (d >> 0 & 0b001001001) or \
+                 (d >> 0 & 0b010010010) or \
+                 (d >> 0 & 0b100100100) or \
+                 (d >> 0 & 0b100010001) or \
+                 (d >> 0 & 0b000111000)
+
+    def ExtractSmallBoard(self, number):
+        board = 0
+        d = self.data
+        if number == 0:
+            board = ((d >> 0 & 0b111) << 0) | ((d >> 9 & 0b111) << 3) | ((d >> 18 & 0b111) << 6)
+            pass
+        elif number == 1:
+            board = ((d >> 3 & 0b111) << 0) | ((d >> 12 & 0b111) << 3) | ((d >> 21 & 0b111) << 6)
+            pass
+        elif number == 2:
+            board = ((d >> 6 & 0b111) << 0) | ((d >> 15 & 0b111) << 3) | ((d >> 24 & 0b111) << 6)
+            pass
+        elif number == 3:
+            board = ((d >> 27 & 0b111) << 0) | ((d >> 36 & 0b111) << 3) | ((d >> 45 & 0b111) << 6)
+            pass
+        elif number == 4:
+            board = ((d >> 30 & 0b111) << 0) | ((d >> 39 & 0b111) << 3) | ((d >> 48 & 0b111) << 6)
+            pass
+        elif number == 5:
+            board = ((d >> 33 & 0b111) << 0) | ((d >> 42 & 0b111) << 3) | ((d >> 51 & 0b111) << 6)
+            pass
+        elif number == 6:
+            board = ((d >> 54 & 0b111) << 0) | ((d >> 63 & 0b111) << 3) | ((d >> 72 & 0b111) << 6)
+            pass
+        elif number == 7:
+            board = ((d >> 57 & 0b111) << 0) | ((d >> 66 & 0b111) << 3) | ((d >> 75 & 0b111) << 6)
+            pass
+        elif number == 8:
+            board = ((d >> 60 & 0b111) << 0) | ((d >> 69 & 0b111) << 3) | ((d >> 78 & 0b111) << 6)
+            pass
+        return board
+
 class OXOState:
     """ A state of the game, i.e. the game board.
         Squares in the board are in this arrangement
@@ -358,12 +462,7 @@ def UCT(rootstate, itermax, verbose=False):
 
     rootnode = Node(state=rootstate)
 
-    start_time = time.time()
-    loops = 0;
-    while True:
-        loop_start_time = time.time()
-        loops += 1
-    # for i in range(itermax):
+    for i in range(itermax):
         node = rootnode
         state = rootstate.Clone()
 
@@ -375,53 +474,20 @@ def UCT(rootstate, itermax, verbose=False):
         # Expand
         if node.untriedMoves != []:  # if we can expand (i.e. state/node is non-terminal)
             ## This is a place for improvement, here we can try to do a small simulation (just for the small grid)
-            m = None
-            state.GetMoves() #updating current grid state :/
-            current_grid = state.GetCurrentGrid()
-            if current_grid is not None:
-                gn = state.GetCurrentGridNumber()
-                small_state = BasicOXOState(current_grid)
-                m = UCTSmall(rootstate=small_state, itermax=itermax/20, verbose=True)
-                m = (gn%3 * 3 + math.floor(gn/3) * 27 + math.floor(m/3) * 9 + m%3)
-                pass
-                #convert this to large grid again
-
-            if not (m in node.untriedMoves):
-                m = random.choice(node.untriedMoves)
-
+            m = random.choice(node.untriedMoves)
             state.DoMove(m)
             node = node.AddChild(m, state)  # add child and descend tree
 
         # Rollout - this can often be made orders of magnitude quicker using a state.GetRandomMove() function
-        moves = state.GetMoves()
-        moveNr = 0
-        while moves != []:  # while state is non-terminal
-            m = None
-            current_grid = state.GetCurrentGrid()
-            if current_grid is not None:
-                gn = state.GetCurrentGridNumber()
-                small_state = BasicOXOState(current_grid)
-                m = UCTSmall(rootstate=small_state, itermax=itermax/20 if moveNr == 0 else itermax/50, verbose=True)
-                m = (gn % 3 * 3 + math.floor(gn / 3) * 27 + math.floor(m / 3) * 9 + m % 3)
-                pass
-
-            if m is None:
-                m = random.choice(state.GetMoves())
+        while state.GetMoves() != []:  # while state is non-terminal
+            m = random.choice(state.GetMoves())
             state.DoMove(m)
-            moveNr += 1
-            moves = state.GetMoves()
 
         # Backpropagate
         while node != None:  # backpropagate from the expanded node and work back to the root node
             node.Update(state.GetResult(
                 node.playerJustMoved))  # state is terminal. Update node with result from POV of node.playerJustMoved
             node = node.parentNode
-
-        cur_time = time.time()
-        loop_time = cur_time - loop_start_time
-        # print("loop time:", loop_time)
-        if (cur_time + loop_time*2) > (start_time + 0.001 * itermax):
-            break
 
     # Output some information about the tree - can be omitted
     if (verbose):
@@ -584,37 +650,42 @@ def evaluate_solution():
         win_rate_single += get_win_rate(temp_games)
         print(win_rate_single / divider)
 
-import matplotlib.pyplot as plt
-
-def graph_things():
-    games = 1000
-    maximum_iters = 101
-    iters_steps = 5
-
-    plt.axis([0, maximum_iters, 0, games])
-
-    for max_iters in range(1, maximum_iters + 1, iters_steps):
-        s = 0
-        for i in range(games):
-            r = UCTPlayGame(max_iters)
-            s += 1 if r == 1 else 0.5 if r == 0 else 0
-            plt.pause(0.05)
-            print(i + 1, s)
-
-        plt.scatter(max_iters, s)
-        plt.pause(0.05)
-        print(s)
-
-    plt.show()
+# import matplotlib.pyplot as plt
+#
+# def graph_things():
+#     games = 1000
+#     maximum_iters = 101
+#     iters_steps = 5
+#
+#     plt.axis([0, maximum_iters, 0, games])
+#
+#     for max_iters in range(1, maximum_iters + 1, iters_steps):
+#         s = 0
+#         for i in range(games):
+#             r = UCTPlayGame(max_iters)
+#             s += 1 if r == 1 else 0.5 if r == 0 else 0
+#             plt.pause(0.05)
+#             print(i + 1, s)
+#
+#         plt.scatter(max_iters, s)
+#         plt.pause(0.05)
+#         print(s)
+#
+#     plt.show()
 
 
 if __name__ == "__main__":
     """ Play a single game to the end using UCT for both players. 
     """
-    evaluate_solution()
+    # evaluate_solution()
     # while True:
     # print(play_game())
-    # UCTPlayGame(100)
+    count = 10
+    iter_max = 10
+    s = time.time()
+    for i in range(count):
+        UCTPlayGame(iter_max)
+    print("Time elapsed avg:", (time.time() - s) / count)
     # graph_things()
 
 
