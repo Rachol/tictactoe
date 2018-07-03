@@ -449,10 +449,15 @@ def UCT(rootstate, itermax, verbose=False):
     """ Conduct a UCT search for itermax iterations starting from rootstate.
         Return the best move from the rootstate.
         Assumes 2 alternating players (player 1 starts), with game results in the range [0.0, 1.0]."""
+    start_time = time.time()
 
     rootnode = Node(state=rootstate)
 
-    for i in range(itermax):
+    loops = 0;
+    while True:
+        loop_start_time = time.time()
+        loops += 1
+    # for i in range(itermax):
         node = rootnode
         state = rootstate.Clone()
 
@@ -479,6 +484,12 @@ def UCT(rootstate, itermax, verbose=False):
                 node.playerJustMoved))  # state is terminal. Update node with result from POV of node.playerJustMoved
             node = node.parentNode
 
+        cur_time = time.time()
+        loop_time = cur_time - loop_start_time
+        # print("loop time:", loop_time)
+        if (cur_time + loop_time * 2) > (start_time + 0.001 * itermax):
+            break
+
     # Output some information about the tree - can be omitted
     if (verbose):
         # print(rootnode.TreeToString(0))
@@ -494,6 +505,7 @@ def UCT(rootstate, itermax, verbose=False):
         # print(rootnode.TreeToString(0))
 
     # print("Large loops", loops)
+    # print("Turn time:", time.time() - start_time)
     return sorted(sorted(rootnode.childNodes, key=lambda c: c.wins), key=lambda c: c.visits)[-1].move  # return the move that was most visited
 
 
@@ -542,37 +554,15 @@ class UCTPlayer:
             self.state.DoMove(opponentAction[0] + opponentAction[1] * 9)
 
         moves = self.state.GetMoves()
-        # validate that moves and validActions are the same
-        error = False
-        if len(moves) != len(validActions):
-            error = True
-
-        for i in moves:
-            cords = [i % 9, math.floor(i / 9)]
-            if cords not in validActions:
-                error = True
-
-        if error:
-            print("Something is wrong")
-            print(str(self.state.board))
-            global game_instance
-            game_instance.printGrid()
-            print([ [i % 9, math.floor(i / 9)] for i in moves ])
-            print(validActions)
-            assert True
         move = None
         if len(validActions) > 0:
             m = UCT(rootstate=self.state, itermax=self.maxIterations, verbose=True)
             # print(m)
             self.state.DoMove(m)
-            # cur_result = self.state.GetResult(3-self.playerNum)
-            # if cur_result == 1.0:
-            #     print("I won", self.playerNum)
-            # elif cur_result == 0:
-            #     print("I lost", self.playerNum)
             move = [m % 9, math.floor(m / 9)]
         else:
             pass
+
 
         return move
 
@@ -585,7 +575,7 @@ import ticplayer
 
 
 def play_game():
-    player1 = UCTPlayer(101)
+    player1 = UCTPlayer(100)
     player2 = ticplayer.BasicPlayer()
     large = True
     global game_instance
@@ -644,27 +634,27 @@ def evaluate_solution():
         print(win_rate_single / divider)
 
 # import matplotlib.pyplot as plt
-#
-# def graph_things():
-#     games = 1000
-#     maximum_iters = 101
-#     iters_steps = 5
-#
-#     plt.axis([0, maximum_iters, 0, games])
-#
-#     for max_iters in range(1, maximum_iters + 1, iters_steps):
-#         s = 0
-#         for i in range(games):
-#             r = UCTPlayGame(max_iters)
-#             s += 1 if r == 1 else 0.5 if r == 0 else 0
-#             plt.pause(0.05)
-#             print(i + 1, s)
-#
-#         plt.scatter(max_iters, s)
-#         plt.pause(0.05)
-#         print(s)
-#
-#     plt.show()
+
+def graph_things():
+    games = 1000
+    maximum_iters = 101
+    iters_steps = 5
+
+    # plt.axis([0, maximum_iters, 0, games])
+
+    for max_iters in range(1, maximum_iters + 1, iters_steps):
+        s = 0
+        for i in range(games):
+            r = UCTPlayGame(max_iters)
+            s += 1 if r == 1 else 0.5 if r == 0 else 0
+            # plt.pause(0.05)
+            print(i + 1, s)
+
+        # plt.scatter(max_iters, s)
+        # plt.pause(0.05)
+        print(s)
+
+    # plt.show()
 
 
 if __name__ == "__main__":
@@ -672,17 +662,18 @@ if __name__ == "__main__":
     """
     # evaluate_solution()
     # while True:
+    # s = time.time()
     # print(play_game())
-    count = 10
-    iter_max = 10
-    s = time.time()
-    loop = 0;
-    for i in range(count):
-        loop += 1
-        UCTPlayGame(iter_max)
-        print("Time elapsed avg (so far):", (time.time() - s) / loop)
-    print("Time elapsed avg:", (time.time() - s) / count)
-    # graph_things()
+    # count = 1
+    # iter_max = 10
+    # s = time.time()
+    # loop = 0;
+    # for i in range(count):
+    #     loop += 1
+    # UCTPlayGame(10)
+    #     print("Time elapsed avg (so far):", (time.time() - s) / loop)
+    # print("Time elapsed avg:", (time.time() - s) / 1)
+    graph_things()
 
 
 
