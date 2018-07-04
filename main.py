@@ -22,15 +22,6 @@ import math
 import time
 from multiprocessing import Process, Queue, Lock
 
-def get_grid_from_cords(x, y):
-    return int(math.floor(y/3)) * 3 + int(math.floor(x/3))
-
-def get_offset_for_grid(number):
-    return [
-        number%3 * 3,
-        int(math.floor(number/3)) * 3
-    ]
-
 
 class BasicOXOState:
     """ A state of the game, i.e. the game board.
@@ -84,6 +75,7 @@ class BasicOXOState:
             if i % 3 == 2: s += "\n"
         return s
 
+
 class GameBoard:
     def __init__(self):
         self.p1 = Board(0)
@@ -116,7 +108,8 @@ class GameBoard:
                 if not (self.p1.CheckSmallWin(self.p1.ExtractSmallBoard(g)) or
                         self.p2.CheckSmallWin(self.p2.ExtractSmallBoard(g))):
                     small_board = c.ExtractSmallBoard(g)
-                    moves.extend([self.p1.TranslateMoveFromSmallBoard(i, g) for i in range(9) if ((small_board >> i) & 1) == 0])
+                    moves.extend(
+                        [self.p1.TranslateMoveFromSmallBoard(i, g) for i in range(9) if ((small_board >> i) & 1) == 0])
             return moves
         else:
             return [self.p1.TranslateMoveFromSmallBoard(i, gn) for i in range(9) if ((small_board >> i) & 1) == 0]
@@ -135,9 +128,9 @@ class GameBoard:
 
     def GetResult(self, player):
         if self.p1.CheckWin():
-            return 1.0 if player == 1 else 0
+            return 1.0 if player == 1 else -1.0
         if self.p2.CheckWin():
-            return 1.0 if player == 2 else 0
+            return 1.0 if player == 2 else -1.0
 
         player1_result_board = self.p1.GetResultBoard()
         player2_result_board = self.p2.GetResultBoard()
@@ -147,7 +140,7 @@ class GameBoard:
             score += (player1_result_board & (1 << i))
             score -= (player2_result_board & (1 << i))
 
-        return 0.5 if score == 0 else 1.0 if (score > 0 and player == 1 or score < 0 and player == 2) else 0
+        return 0.5 if score == 0 else 1.0 if (score > 0 and player == 1 or score < 0 and player == 2) else -1.0
 
     def __repr__(self):
         s = ""
@@ -169,12 +162,13 @@ class GameBoard:
 
         return s
 
+
 class Board:
     def __init__(self, d):
         self.d = d
         self.mNSB = []
         for i in range(81):
-            self.mNSB.append(math.floor((i % 27)/9) * 3 + i%3)
+            self.mNSB.append(math.floor((i % 27) / 9) * 3 + i % 3)
 
         self.sTLM = []
         for i in range(9):
@@ -224,14 +218,13 @@ class Board:
     def CheckSmallWin(self, d):
         # 9 options
         return (d & 0b000000111) == 0b000000111 or \
-                (d & 0b000111000) == 0b000111000 or \
-                (d & 0b111000000) == 0b111000000 or \
-                (d & 0b001001001) == 0b001001001 or \
-                (d & 0b010010010) == 0b010010010 or \
-                (d & 0b100100100) == 0b100100100 or \
-                (d & 0b100010001) == 0b100010001 or \
-                (d & 0b000111000) == 0b000111000
-
+               (d & 0b000111000) == 0b000111000 or \
+               (d & 0b111000000) == 0b111000000 or \
+               (d & 0b001001001) == 0b001001001 or \
+               (d & 0b010010010) == 0b010010010 or \
+               (d & 0b100100100) == 0b100100100 or \
+               (d & 0b100010001) == 0b100010001 or \
+               (d & 0b001010100) == 0b001010100
 
     def ExtractSmallBoard(self, number):
         board = 0
@@ -265,6 +258,7 @@ class Board:
             pass
         return board
 
+
 class OXOState:
     """ A state of the game, i.e. the game board.
         Squares in the board are in this arrangement
@@ -276,7 +270,7 @@ class OXOState:
 
     def __init__(self):
         self.playerJustMoved = 0  # At the root pretend the player just moved is p2 - p1 has the first move
-        self.lastMove = [-1,-1]
+        self.lastMove = [-1, -1]
         self.board = GameBoard()
         self.currentGrid = -1
 
@@ -293,10 +287,10 @@ class OXOState:
         """ Update a state by carrying out the given move.
             Must update playerToMove.
         """
-        if not(move >= 0 and move <= 80 and move == int(move) and (self.board.GetData() & (1 << move)) == 0):
-            print('{:b}'.format(self.board.GetData()))
-            print('{:b}'.format(1 << move))
-            print(str(self.board))
+        if not (move >= 0 and move <= 80 and move == int(move) and (self.board.GetData() & (1 << move)) == 0):
+            # print('{:b}'.format(self.board.GetData()), file=sys.stderr, flush=True)
+            # print('{:b}'.format(1 << move), file=sys.stderr, flush=True)
+            # print(str(self.board), file=sys.stderr, flush=True)
             assert True
         self.playerJustMoved = 1 if (self.playerJustMoved == 2 or self.playerJustMoved == 0) else 2
         self.board.Move(move, self.playerJustMoved)
@@ -314,13 +308,8 @@ class OXOState:
         # assert False  # Should not be possible to get here
 
     def __repr__(self):
-        s = ""
-        for i in range(81):
-            s += ".XO"[self.board[math.floor(i/9)][i%9]]
-            if i % 3 == 2: s += " | "
-            if i % 9 == 8: s += "\n"
-            if i % 27 == 26: s += "-----------------\n"
-        return s
+        return str(self.board)
+
 
 class Node:
     """ A node in the game tree. Note wins is always from the viewpoint of playerJustMoved.
@@ -341,8 +330,8 @@ class Node:
             lambda c: c.wins/c.visits + UCTK * sqrt(2*log(self.visits)/c.visits to vary the amount of
             exploration versus exploitation.
         """
-
-        s = sorted(self.childNodes, key=lambda c: c.wins / c.visits + math.sqrt(2 * math.log(self.visits) / c.visits))[-1]
+        s = sorted(self.childNodes, key=lambda c: c.wins / c.visits + math.sqrt(2 * math.log(self.visits) / c.visits))[
+            -1]
         return s
 
     def AddChild(self, m, s):
@@ -382,74 +371,17 @@ class Node:
             s += str(c) + "\n"
         return s
 
-def UCTSmall(rootstate, itermax, verbose=False):
-    """ Conduct a UCT search for itermax iterations starting from rootstate.
-        Return the best move from the rootstate.
-        Assumes 2 alternating players (player 1 starts), with game results in the range [0.0, 1.0]."""
 
-    rootnode = Node(state=rootstate)
-
-    start_time = time.time()
-    loops = 0;
-    while True:
-        loop_start_time = time.time()
-        loops += 1
-    # for i in range(itermax):
-        node = rootnode
-        state = rootstate.Clone()
-
-        # Select
-        while node.untriedMoves == [] and node.childNodes != []:  # node is fully expanded and non-terminal
-            node = node.UCTSelectChild()
-            state.DoMove(node.move)
-
-        # Expand
-        if node.untriedMoves != []:  # if we can expand (i.e. state/node is non-terminal)
-            ## This is a place for improvement, here we can try to do a small simulation (just for the small grid)
-            m = random.choice(node.untriedMoves)
-            state.DoMove(m)
-            node = node.AddChild(m, state)  # add child and descend tree
-
-        # Rollout - this can often be made orders of magnitude quicker using a state.GetRandomMove() function
-        while state.GetMoves() != []:  # while state is non-terminal
-            m = random.choice(state.GetMoves())
-            state.DoMove(m)
-
-        # Backpropagate
-        while node != None:  # backpropagate from the expanded node and work back to the root node
-            node.Update(state.GetResult(
-                node.playerJustMoved))  # state is terminal. Update node with result from POV of node.playerJustMoved
-            node = node.parentNode
-
-        cur_time = time.time()
-        loop_time = cur_time - loop_start_time
-        # print("loop time:", loop_time)
-        if (cur_time + loop_time*2) > (start_time + 0.001 * itermax):
-            break
-
-    # Output some information about the tree - can be omitted
-    if (verbose):
-        # print(rootnode.TreeToString(0))
-        pass
-    else:
-        # print(rootnode.ChildrenToString())
-        pass
-
-    if len(rootnode.childNodes) == 0:
-        print("hmm", loops)
-        # print(rootstate)
-        # print(rootnode.TreeToString(0))
-
-    # print("Small loops", loops)
-
-    return sorted(sorted(rootnode.childNodes, key=lambda c: c.wins), key=lambda c: c.visits)[-1].move  # return the move that was most visited
+turn_start = time.time()
 
 
 def UCT(rootstate, itermax, verbose=False):
     """ Conduct a UCT search for itermax iterations starting from rootstate.
         Return the best move from the rootstate.
         Assumes 2 alternating players (player 1 starts), with game results in the range [0.0, 1.0]."""
-    start_time = time.time()
+    global turn_start
+    turn_start = time.time()
+    start_time = turn_start
 
     rootnode = Node(state=rootstate)
 
@@ -457,7 +389,7 @@ def UCT(rootstate, itermax, verbose=False):
     while True:
         loop_start_time = time.time()
         loops += 1
-    # for i in range(itermax):
+        # for i in range(itermax):
         node = rootnode
         state = rootstate.Clone()
 
@@ -474,20 +406,24 @@ def UCT(rootstate, itermax, verbose=False):
             node = node.AddChild(m, state)  # add child and descend tree
 
         # Rollout - this can often be made orders of magnitude quicker using a state.GetRandomMove() function
+        steps = 1
         while state.GetMoves() != []:  # while state is non-terminal
+            steps += 1
             m = random.choice(state.GetMoves())
             state.DoMove(m)
 
         # Backpropagate
+        last_player = node.playerJustMoved
+        result = (state.GetResult(node.playerJustMoved)) / steps
         while node != None:  # backpropagate from the expanded node and work back to the root node
-            node.Update(state.GetResult(
-                node.playerJustMoved))  # state is terminal. Update node with result from POV of node.playerJustMoved
+            node.Update(result)  # state is terminal. Update node with result from POV of node.playerJustMoved
+            result = result * (-1)
             node = node.parentNode
 
         cur_time = time.time()
-        loop_time = cur_time - loop_start_time
+        loop_time = (cur_time - turn_start) / loops
         # print("loop time:", loop_time)
-        if (cur_time + loop_time * 2) > (start_time + 0.001 * itermax):
+        if (cur_time + loop_time) > (start_time + 0.001 * itermax):
             break
 
     # Output some information about the tree - can be omitted
@@ -504,9 +440,56 @@ def UCT(rootstate, itermax, verbose=False):
         # print(rootstate)
         # print(rootnode.TreeToString(0))
 
+    # print("Large loops", loops, file=sys.stderr, flush=True)
     # print("Large loops", loops)
-    # print("Turn time:", time.time() - start_time)
-    return sorted(sorted(rootnode.childNodes, key=lambda c: c.wins), key=lambda c: c.visits)[-1].move  # return the move that was most visited
+    # print("Turn time:", time.time() - start_time, file=sys.stderr, flush=True)
+    return sorted(sorted(rootnode.childNodes, key=lambda c: c.wins / c.visits), key=lambda c: c.wins)[
+        -1].move  # return the move that was most visited
+
+
+class UCTPlayer:
+    def __init__(self, max_iterations):
+        self.state = OXOState()
+        self.playerNum = 1
+        self.maxIterations = max_iterations
+        self.initialized = False
+        pass
+
+    def get_move(self, opponentAction, validActions):
+        if opponentAction[0] == opponentAction[1] == -1:
+            self.playerNum = 2
+        else:
+            self.state.DoMove(opponentAction[0] + opponentAction[1] * 9)
+
+        moves = self.state.GetMoves()
+        # print([[m % 9, math.floor(m / 9)] for m in moves], file=sys.stderr, flush=True)
+        move = None
+        if len(validActions) > 0:
+            m = None
+            if not self.initialized:
+                m = UCT(rootstate=self.state, itermax=995, verbose=True)
+                self.initialized = True
+            else:
+                m = UCT(rootstate=self.state, itermax=self.maxIterations, verbose=True)
+            # print(m)
+            self.state.DoMove(m)
+            move = [m % 9, math.floor(m / 9)]
+        else:
+            pass
+
+        # print(str(self.state), file=sys.stderr, flush=True)
+
+        return move
+
+    # def getResult(self):
+    #     result = self.state.GetResult(self.playerNum)
+    #     if result > 0:
+    #         return 1.0
+    #     elif result <= 0:
+    #         return 0
+    #     else:
+    #         return 0.5
+
 
 
 def UCTPlayGame(max_iterations):
@@ -540,35 +523,6 @@ def UCTPlayGame(max_iterations):
 
 game_instance = None
 
-class UCTPlayer:
-    def __init__(self, max_iterations):
-        self.state = OXOState()
-        self.playerNum = 1
-        self.maxIterations = max_iterations
-        pass
-
-    def get_move(self, opponentAction, validActions):
-        if opponentAction[0] == opponentAction[1] == -1:
-            self.playerNum = 2
-        else:
-            self.state.DoMove(opponentAction[0] + opponentAction[1] * 9)
-
-        moves = self.state.GetMoves()
-        move = None
-        if len(validActions) > 0:
-            m = UCT(rootstate=self.state, itermax=self.maxIterations, verbose=True)
-            # print(m)
-            self.state.DoMove(m)
-            move = [m % 9, math.floor(m / 9)]
-        else:
-            pass
-
-
-        return move
-
-    def getResult(self):
-        return self.state.GetResult(3 - self.playerNum)
-
 
 import tictactoe
 import ticplayer
@@ -581,8 +535,8 @@ def play_game():
     global game_instance
     game_instance = tictactoe.Game(large, player1, player2)
     result = game_instance.play()
-    if result != 1 if player1.getResult() == 1.0 else 2:
-        pass
+    # if result != 1 if player1.getResult() == 1.0 else 2:
+    #     pass
     return result
 
 def worker(q, lock):
@@ -660,7 +614,8 @@ def graph_things():
 if __name__ == "__main__":
     """ Play a single game to the end using UCT for both players. 
     """
-    # evaluate_solution()
+
+    evaluate_solution()
     # while True:
     # s = time.time()
     # print(play_game())
@@ -673,8 +628,12 @@ if __name__ == "__main__":
     # UCTPlayGame(10)
     #     print("Time elapsed avg (so far):", (time.time() - s) / loop)
     # print("Time elapsed avg:", (time.time() - s) / 1)
-    graph_things()
+    # graph_things()
+
+    # state = OXOState()  # uncomment to play OXO
+    # state = NimState(15)  # uncomment to play Nim with the given number of starting chips
+    # UCT(rootstate=state, itermax=1000000, verbose=True)  # player 1
 
 
-
+## Last result 72.95
 
